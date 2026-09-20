@@ -67,6 +67,7 @@
     "@napi-rs/canvas": "^0.1.92",
     "@tailwindcss/postcss": "^4.2.1",
     "@tailwindcss/typography": "^0.5.19",
+    "@tauri-apps/cli": "^2",
     "@types/bun": "latest",
     "@types/node": "^24.2.1",
     "@types/react": "^19",

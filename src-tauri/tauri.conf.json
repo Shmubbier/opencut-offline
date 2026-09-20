@@ -3,6 +3,7 @@
   "productName": "OpenCut",
   "version": "0.1.0",
   "identifier": "app.opencut.desktop",
+  "mainBinaryName": "OpenCut",
   "build": {
     "frontendDist": "../desktop"
   },
@@ -14,7 +15,8 @@
         "width": 1400,
         "height": 900,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "additionalBrowserArgs": "--disable-features=msSmartScreenProtection,msWebOOUI,msPdfOOUI --disable-background-networking --disable-component-update --disable-sync --disable-domain-reliability"
       }
     ],
     "security": {

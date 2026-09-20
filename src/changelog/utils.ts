@@ -1,7 +1,21 @@
-import { allChangelogs } from "content-collections";
-
 export type Change = { type: string; text: string };
-export type Release = (typeof allChangelogs)[number];
+export type Release = {
+	version: string;
+	title: string;
+	date?: string;
+	summary?: string;
+	description?: string;
+	isLatest?: boolean;
+	published?: boolean;
+	changes: Change[];
+};
+
+// content-collections (markdown build-time content loader) was removed for
+// the offline build; the changelog has no data source until Task 4 decides
+// its fate. Keeping this empty (instead of reintroducing the dep) is enough
+// to keep ChangelogNotification and the changelog pages compiling and
+// rendering "nothing to show" rather than crashing.
+const allChangelogs: Release[] = [];
 
 type ChangeSectionConfig = {
 	title: string;

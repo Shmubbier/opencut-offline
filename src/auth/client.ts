@@ -1,6 +1,15 @@
-import { createAuthClient } from "better-auth/react";
-import { webEnv } from "@/env/web";
+// Offline stub: the app runs with no backend, so auth is a permanent
+// logged-out no-op. Export names match the real auth client shape that
+// callers previously imported (signIn, signUp, useSession).
 
-export const { signIn, signUp, useSession } = createAuthClient({
-	baseURL: webEnv.NEXT_PUBLIC_SITE_URL,
-});
+export function useSession() {
+	return { data: null, isPending: false, error: null };
+}
+
+export async function signIn(): Promise<void> {
+	// no-op: offline build has no auth backend
+}
+
+export async function signUp(): Promise<void> {
+	// no-op: offline build has no auth backend
+}

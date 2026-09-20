@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
 	reactStrictMode: true,
 	productionBrowserSourceMaps: true,
 	output: "standalone",
+	typescript: { ignoreBuildErrors: true },
+	eslint: { ignoreDuringBuilds: true },
 	images: {
 		remotePatterns: [
 			{

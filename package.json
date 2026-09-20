@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "format": "prettier src --write"
+    "format": "prettier src --write",
+    "desktop:build": "node scripts/build-desktop.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

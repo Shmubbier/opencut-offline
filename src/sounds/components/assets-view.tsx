@@ -11,24 +11,13 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { useSoundSearch } from "@/sounds/use-sound-search";
 import { useSoundsStore } from "@/sounds/sounds-store";
 import type { SavedSound, SoundEffect } from "@/sounds/types";
-import { cn } from "@/utils/ui";
 import {
 	FavouriteIcon,
-	FilterMailIcon,
 	PauseIcon,
 	PlayIcon,
 	PlusSignIcon,
@@ -63,242 +52,16 @@ export function SoundsView() {
 	);
 }
 
+// ponytail: sound effects were an online-only Freesound search with no local
+// fallback data — offline build shows a static notice instead of the
+// search UI. Add a bundled sound library here if offline browsing is needed.
 function SoundEffectsView() {
-	const {
-		topSoundEffects,
-		isLoading,
-		searchQuery,
-		setSearchQuery,
-		scrollPosition,
-		setScrollPosition,
-		loadSavedSounds,
-		showCommercialOnly,
-		toggleCommercialFilter,
-		hasLoaded,
-		setTopSoundEffects,
-		setLoading,
-		setError,
-		setHasLoaded,
-		setCurrentPage,
-		setHasNextPage,
-		setTotalCount,
-	} = useSoundsStore();
-	const {
-		results: searchResults,
-		isLoading: isSearching,
-		loadMore,
-		hasNextPage,
-		isLoadingMore,
-	} = useSoundSearch({
-		query: searchQuery,
-		commercialOnly: showCommercialOnly,
-	});
-
-	const [playingId, setPlayingId] = useState<number | null>(null);
-	const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(
-		null,
-	);
-
-	const { scrollAreaRef, handleScroll } = useInfiniteScroll({
-		onLoadMore: loadMore,
-		hasMore: hasNextPage,
-		isLoading: isLoadingMore || isSearching,
-	});
-
-	useEffect(() => {
-		loadSavedSounds();
-	}, [loadSavedSounds]);
-
-	useEffect(() => {
-		if (hasLoaded) {
-			return;
-		}
-
-		let shouldIgnore = false;
-
-		const fetchTopSounds = async () => {
-			try {
-				if (!shouldIgnore) {
-					setLoading({ loading: true });
-					setError({ error: null });
-				}
-
-				const response = await fetch(
-					"/api/sounds/search?page_size=50&sort=downloads",
-				);
-
-				if (!shouldIgnore) {
-					if (!response.ok) {
-						throw new Error(`Failed to fetch: ${response.status}`);
-					}
-
-					const data = await response.json();
-					setTopSoundEffects({ sounds: data.results });
-					setHasLoaded({ loaded: true });
-
-					setCurrentPage({ page: 1 });
-					setHasNextPage({ hasNext: !!data.next });
-					setTotalCount({ count: data.count });
-				}
-			} catch (error) {
-				if (!shouldIgnore) {
-					console.error("Failed to fetch top sounds:", error);
-					setError({
-						error:
-							error instanceof Error ? error.message : "Failed to load sounds",
-					});
-				}
-			} finally {
-				if (!shouldIgnore) {
-					setLoading({ loading: false });
-				}
-			}
-		};
-
-		const timeoutId = setTimeout(fetchTopSounds, 100, {});
-
-		return () => {
-			shouldIgnore = true;
-			clearTimeout(timeoutId);
-		};
-	}, [
-		hasLoaded,
-		setTopSoundEffects,
-		setLoading,
-		setError,
-		setHasLoaded,
-		setCurrentPage,
-		setHasNextPage,
-		setTotalCount,
-	]);
-
-	useEffect(() => {
-		if (!scrollAreaRef.current || scrollPosition <= 0) {
-			return;
-		}
-
-		const restoreScrollPosition = () => {
-			scrollAreaRef.current?.scrollTo({ top: scrollPosition });
-		};
-
-		const timeoutId = setTimeout(restoreScrollPosition, 100, {});
-
-		return () => clearTimeout(timeoutId);
-	}, [scrollPosition, scrollAreaRef]);
-
-	const handleScrollWithPosition = ({
-		currentTarget,
-	}: React.UIEvent<HTMLDivElement>) => {
-		const { scrollTop } = currentTarget;
-		setScrollPosition({ position: scrollTop });
-		handleScroll({ currentTarget } as React.UIEvent<HTMLDivElement>);
-	};
-
-	const displayedSounds = searchQuery ? searchResults : topSoundEffects;
-
-	const playSound = ({ sound }: { sound: SoundEffect }) => {
-		if (playingId === sound.id) {
-			audioElement?.pause();
-			setPlayingId(null);
-			return;
-		}
-
-		audioElement?.pause();
-
-		if (sound.previewUrl) {
-			const audio = new Audio(sound.previewUrl);
-			audio.addEventListener("ended", () => {
-				setPlayingId(null);
-			});
-			audio.addEventListener("error", () => {
-				setPlayingId(null);
-			});
-			audio.play().catch((error) => {
-				console.error("Failed to play sound preview:", error);
-				setPlayingId(null);
-			});
-
-			setAudioElement(audio);
-			setPlayingId(sound.id);
-		}
-	};
-
 	return (
-		<div className="mt-1 flex h-full flex-col gap-5">
-			<div className="flex items-center gap-3">
-				<Input
-					placeholder="Search sound effects"
-					className="w-full"
-					containerClassName="w-full"
-					value={searchQuery}
-					onChange={({ currentTarget }) =>
-						setSearchQuery({ query: currentTarget.value })
-					}
-					showClearIcon
-					onClear={() => setSearchQuery({ query: "" })}
-				/>
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="text"
-							size="icon"
-							className={cn(showCommercialOnly && "text-primary")}
-						>
-							<HugeiconsIcon icon={FilterMailIcon} />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-56">
-						<DropdownMenuCheckboxItem
-							checked={showCommercialOnly}
-							onCheckedChange={() => toggleCommercialFilter()}
-						>
-							Show only commercially licensed
-						</DropdownMenuCheckboxItem>
-						<div className="text-muted-foreground px-2 py-1.5 text-xs">
-							{showCommercialOnly
-								? "Only showing sounds licensed for commercial use"
-								: "Showing all sounds regardless of license"}
-						</div>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
-
-			<div className="relative h-full overflow-hidden">
-				<ScrollArea
-					className="h-full flex-1"
-					ref={scrollAreaRef}
-					onScrollCapture={handleScrollWithPosition}
-				>
-					<div className="flex flex-col gap-4">
-						{isLoading && !searchQuery && (
-							<div className="text-muted-foreground text-sm">
-								Loading sounds...
-							</div>
-						)}
-						{isSearching && searchQuery && (
-							<div className="text-muted-foreground text-sm">Searching...</div>
-						)}
-						{displayedSounds.map((sound) => (
-							<AudioItem
-								key={sound.id}
-								sound={sound}
-								isPlaying={playingId === sound.id}
-								onPlay={playSound}
-							/>
-						))}
-						{!isLoading && !isSearching && displayedSounds.length === 0 && (
-							<div className="text-muted-foreground text-sm">
-								{searchQuery ? "No sounds found" : "No sounds available"}
-							</div>
-						)}
-						{isLoadingMore && (
-							<div className="text-muted-foreground py-4 text-center text-sm">
-								Loading more sounds...
-							</div>
-						)}
-					</div>
-				</ScrollArea>
-			</div>
+		<div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+			<p className="text-sm font-medium">Sound search is unavailable offline</p>
+			<p className="text-muted-foreground text-sm text-balance">
+				Browse the Saved tab for sounds you've already added
+			</p>
 		</div>
 	);
 }

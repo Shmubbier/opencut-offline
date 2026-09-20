@@ -1,7 +1,6 @@
 import type { FontAtlas } from "@/fonts/types";
 import { SYSTEM_FONTS } from "@/fonts/system-fonts";
 
-const GOOGLE_FONTS_CSS = "https://fonts.googleapis.com/css2";
 const FONT_ATLAS_PATH = "/fonts/font-atlas.json";
 const FONT_CHUNK_PATH_PREFIX = "/fonts/font-chunk-";
 
@@ -9,10 +8,6 @@ const fullLoaded = new Set<string>();
 
 let cachedAtlas: FontAtlas | null = null;
 let atlasFetchPromise: Promise<FontAtlas | null> | null = null;
-
-function encodeGoogleFontsFamily(family: string): string {
-	return family.replace(/ /g, "+");
-}
 
 export function getCachedFontAtlas(): FontAtlas | null {
 	return cachedAtlas;
@@ -61,15 +56,8 @@ export async function loadFullFont({
 }): Promise<void> {
 	if (fullLoaded.has(family)) return;
 
-	const url = `${GOOGLE_FONTS_CSS}?family=${encodeGoogleFontsFamily(family)}:wght@${weights.join(";")}&display=swap`;
-	const link = document.createElement("link");
-	link.rel = "stylesheet";
-	link.href = url;
-	document.head.appendChild(link);
-	await new Promise<void>((resolve) => {
-		link.addEventListener("load", () => resolve(), { once: true });
-		link.addEventListener("error", () => resolve(), { once: true });
-	});
+	// ponytail: offline build — no remote stylesheet fetch. This only resolves
+	// faces already available locally (system fonts / bundled atlas fonts).
 	await Promise.all(
 		weights.map((weight) =>
 			document.fonts.load(`${weight} 16px "${family.replace(/"/g, '\\"')}"`),

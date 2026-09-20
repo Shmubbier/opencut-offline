@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@/components/ui/button";
@@ -74,14 +73,6 @@ export function ChangelogNotification() {
 					{release.summary}
 				</p>
 			)}
-
-			<div className="flex justify-end">
-				<Button asChild size="sm">
-					<Link href="/changelog" onClick={() => setRelease(null)}>
-						See full changelog
-					</Link>
-				</Button>
-			</div>
 		</div>
 	);
 }

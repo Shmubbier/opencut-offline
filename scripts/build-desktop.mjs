@@ -8,9 +8,11 @@ import { existsSync, rmSync, cpSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const bun = process.env.BUN
-  ?? "/c/Users/naomi/AppData/Local/Microsoft/WinGet/Packages/Oven-sh.Bun_Microsoft.Winget.Source_8wekyb3d8bbwe/bun-windows-x64/bun.exe"
-  ?? "bun";
+// Rely on PATH by default (portable across machines/CI). Set $BUN to override
+// with an absolute path if `bun` isn't on PATH in a given shell — it must be a
+// native Windows path (e.g. C:\...\bun.exe), not an msys-style /c/... path,
+// since this gets executed via cmd.exe.
+const bun = process.env.BUN ?? "bun";
 
 function run(cmd) {
   console.log(`\n> ${cmd}`);

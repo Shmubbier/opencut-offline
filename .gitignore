@@ -24,3 +24,5 @@ dist/
 
 # Tauri (future desktop packaging)
 src-tauri/target/
+src-tauri/binaries/
+src-tauri/resources/

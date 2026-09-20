@@ -36,13 +36,45 @@ fn resolve_server_js(app: &tauri::AppHandle) -> Option<PathBuf> {
 }
 
 /// Strip a Windows extended-length path prefix (`\\?\`), which Node chokes on
-/// when it's the main module argument. Leaves UNC verbatim paths (`\\?\UNC\...`)
-/// and non-Windows paths untouched.
+/// when it's the main module argument (see the `EISDIR`/realpath crash this
+/// works around, above). Converts the UNC verbatim form (`\\?\UNC\server\share\...`)
+/// to the standard UNC form (`\\server\share\...`) rather than just passing it
+/// through unchanged, since that form breaks Node's loader the same way.
+/// Non-verbatim paths are returned unchanged.
+//
+// ponytail: stripping `\\?\` re-exposes the historical ~260 char MAX_PATH
+// limit (the verbatim prefix exists specifically to bypass it). Fine for this
+// app's install/dev paths; if a deeply-nested install location ever hits it,
+// the fix is either keeping the prefix (and fixing Node's handling some other
+// way) or requiring a short install path.
 fn strip_verbatim_prefix(path: &str) -> String {
-    path.strip_prefix(r"\\?\")
-        .filter(|rest| !rest.starts_with("UNC\\"))
-        .unwrap_or(path)
-        .to_string()
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_verbatim_prefix;
+
+    #[test]
+    fn strips_local_drive_verbatim_prefix() {
+        assert_eq!(strip_verbatim_prefix(r"\\?\D:\a\b"), r"D:\a\b");
+    }
+
+    #[test]
+    fn rewrites_unc_verbatim_prefix_to_standard_unc() {
+        assert_eq!(strip_verbatim_prefix(r"\\?\UNC\srv\share\x"), r"\\srv\share\x");
+    }
+
+    #[test]
+    fn leaves_plain_paths_unchanged() {
+        assert_eq!(strip_verbatim_prefix(r"D:\a\b"), r"D:\a\b");
+    }
 }
 
 fn pick_free_port() -> std::io::Result<u16> {

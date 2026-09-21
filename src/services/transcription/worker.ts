@@ -13,11 +13,25 @@ import {
 // Offline config: force transformers.js to load the bundled model + onnxruntime
 // wasm from the local sidecar only — never the HF hub or a CDN. The build stages
 // the model into public/models/<hfId>/ and the ort wasm into public/ort/.
+//
+// IMPORTANT: this worker is instantiated from a `blob:` URL, so its base URL is
+// e.g. `blob:http://127.0.0.1:<port>/<uuid>`. A root-relative path ("/models/…")
+// cannot be parsed against a blob: base — `fetch("/models/…")` throws
+// "Failed to parse URL", which transformers.js surfaces as "file not found
+// locally". So the base MUST be an absolute, origin-qualified URL. A blob worker
+// inherits the creating page's origin via self.location.origin.
+const OFFLINE_ORIGIN =
+	typeof self !== "undefined" &&
+	self.location &&
+	self.location.origin &&
+	self.location.origin !== "null"
+		? self.location.origin
+		: "";
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
-env.localModelPath = "/models/";
+env.localModelPath = `${OFFLINE_ORIGIN}/models/`;
 if (env.backends?.onnx?.wasm) {
-	env.backends.onnx.wasm.wasmPaths = "/ort/";
+	env.backends.onnx.wasm.wasmPaths = `${OFFLINE_ORIGIN}/ort/`;
 	// Single-threaded: the offline sidecar doesn't send COOP/COEP headers, so
 	// SharedArrayBuffer (and thus wasm threads) is unavailable in WebView2.
 	env.backends.onnx.wasm.numThreads = 1;

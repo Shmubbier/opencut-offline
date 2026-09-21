@@ -72,12 +72,9 @@ cpSync(standaloneDir, resourceServerDir, { recursive: true, force: true });
 // ponytail: hardcoded to the Windows x64 MSVC triple — this pipeline is
 // Windows-only for v1. Add per-platform triples (rustc -vV) if/when macOS or
 // Linux builds are needed.
-const sidecarPath = join(
-  root,
-  "src-tauri",
-  "binaries",
-  "node-x86_64-pc-windows-msvc.exe",
-);
+const binariesDir = join(root, "src-tauri", "binaries");
+mkdirSync(binariesDir, { recursive: true }); // gitignored; absent on a clean/CI checkout
+const sidecarPath = join(binariesDir, "node-x86_64-pc-windows-msvc.exe");
 if (!existsSync(sidecarPath)) {
   copyFileSync(process.execPath, sidecarPath);
 }

@@ -89,10 +89,12 @@ fn pick_free_port() -> std::io::Result<u16> {
 
 fn wait_for_health(port: u16, timeout: Duration) -> bool {
     let url = format!("http://127.0.0.1:{port}/api/health");
-    let client = reqwest::blocking::Client::builder()
+    let Ok(client) = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
-        .expect("failed to build health-check http client");
+    else {
+        return false;
+    };
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
         if let Ok(resp) = client.get(&url).send() {
@@ -103,6 +105,18 @@ fn wait_for_health(port: u16, timeout: Duration) -> bool {
         std::thread::sleep(Duration::from_millis(250));
     }
     false
+}
+
+/// Show a graceful "failed to start" message in the main window, replacing its
+/// body, instead of letting a recoverable startup failure panic the whole app.
+fn show_startup_error(app: &tauri::AppHandle, msg: &str) {
+    log::error!("startup error: {msg}");
+    if let Some(window) = app.get_webview_window("main") {
+        let safe = msg.replace('\\', "\\\\").replace('\'', "\\'");
+        let _ = window.eval(&format!(
+            "document.body.innerHTML = '<div style=\"font-family:system-ui,sans-serif;color:#e5e5e5;background:#0a0a0a;height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;\"><div><h2>OpenCut failed to start</h2><p style=\"opacity:.8\">{safe}</p></div></div>'"
+        ));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -120,11 +134,22 @@ pub fn run() {
             }
 
             let app_handle = app.handle().clone();
-            let server_js = resolve_server_js(&app_handle)
-                .expect("could not locate server.js (checked resource dir and .next/standalone)");
+            let server_js = match resolve_server_js(&app_handle) {
+                Some(p) => p,
+                None => {
+                    show_startup_error(&app_handle, "Could not locate the bundled app server files.");
+                    return Ok(());
+                }
+            };
             log::info!("resolved server.js at {server_js:?}");
 
-            let port = pick_free_port().expect("failed to pick a free localhost port");
+            let port = match pick_free_port() {
+                Ok(p) => p,
+                Err(e) => {
+                    show_startup_error(&app_handle, &format!("Could not find a free port to start the app server: {e}"));
+                    return Ok(());
+                }
+            };
             log::info!("starting Next.js sidecar on port {port}");
 
             // Windows' `resource_dir()` can return an extended-length (`\\?\`) verbatim
@@ -133,15 +158,24 @@ pub fn run() {
             // `EISDIR: lstat 'D:'`, so strip it before passing the path to the sidecar.
             let server_js_arg = strip_verbatim_prefix(&server_js.to_string_lossy());
 
-            let sidecar = app_handle
-                .shell()
-                .sidecar("node")
-                .expect("failed to create node sidecar command")
-                .args([server_js_arg])
-                .env("PORT", port.to_string())
-                .env("HOSTNAME", "127.0.0.1");
+            let sidecar = match app_handle.shell().sidecar("node") {
+                Ok(cmd) => cmd
+                    .args([server_js_arg])
+                    .env("PORT", port.to_string())
+                    .env("HOSTNAME", "127.0.0.1"),
+                Err(e) => {
+                    show_startup_error(&app_handle, &format!("Could not start the app server: {e}"));
+                    return Ok(());
+                }
+            };
 
-            let (mut rx, child) = sidecar.spawn().expect("failed to spawn node sidecar");
+            let (mut rx, child) = match sidecar.spawn() {
+                Ok(pair) => pair,
+                Err(e) => {
+                    show_startup_error(&app_handle, &format!("Could not start the app server: {e}"));
+                    return Ok(());
+                }
+            };
             app_handle.state::<ServerChild>().0.lock().unwrap().replace(child);
 
             // Drain the sidecar's stdout/stderr so it doesn't block, and log it.
@@ -185,10 +219,7 @@ pub fn run() {
                             Err(e) => log::error!("failed to parse server url: {e}"),
                         }
                     } else {
-                        log::error!("server did not become healthy within timeout");
-                        let _ = window.eval(
-                            "document.body.innerHTML = '<p style=\"font-family:sans-serif;padding:2rem;\">Failed to start the local server. Please restart the app.</p>'",
-                        );
+                        show_startup_error(&app_handle, "The local server did not start in time. Please restart the app.");
                     }
                 }
             });

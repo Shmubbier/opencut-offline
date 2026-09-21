@@ -1,0 +1,104 @@
+{
+  "families": [
+    {
+      "family": "Roboto",
+      "slug": "roboto",
+      "cssPath": "/fonts/local/roboto.css"
+    },
+    {
+      "family": "Open Sans",
+      "slug": "open-sans",
+      "cssPath": "/fonts/local/open-sans.css"
+    },
+    {
+      "family": "Lato",
+      "slug": "lato",
+      "cssPath": "/fonts/local/lato.css"
+    },
+    {
+      "family": "Montserrat",
+      "slug": "montserrat",
+      "cssPath": "/fonts/local/montserrat.css"
+    },
+    {
+      "family": "Oswald",
+      "slug": "oswald",
+      "cssPath": "/fonts/local/oswald.css"
+    },
+    {
+      "family": "Poppins",
+      "slug": "poppins",
+      "cssPath": "/fonts/local/poppins.css"
+    },
+    {
+      "family": "Raleway",
+      "slug": "raleway",
+      "cssPath": "/fonts/local/raleway.css"
+    },
+    {
+      "family": "Playfair Display",
+      "slug": "playfair-display",
+      "cssPath": "/fonts/local/playfair-display.css"
+    },
+    {
+      "family": "Merriweather",
+      "slug": "merriweather",
+      "cssPath": "/fonts/local/merriweather.css"
+    },
+    {
+      "family": "Nunito",
+      "slug": "nunito",
+      "cssPath": "/fonts/local/nunito.css"
+    },
+    {
+      "family": "Bebas Neue",
+      "slug": "bebas-neue",
+      "cssPath": "/fonts/local/bebas-neue.css"
+    },
+    {
+      "family": "Anton",
+      "slug": "anton",
+      "cssPath": "/fonts/local/anton.css"
+    },
+    {
+      "family": "Lobster",
+      "slug": "lobster",
+      "cssPath": "/fonts/local/lobster.css"
+    },
+    {
+      "family": "Pacifico",
+      "slug": "pacifico",
+      "cssPath": "/fonts/local/pacifico.css"
+    },
+    {
+      "family": "Dancing Script",
+      "slug": "dancing-script",
+      "cssPath": "/fonts/local/dancing-script.css"
+    },
+    {
+      "family": "Source Sans 3",
+      "slug": "source-sans-3",
+      "cssPath": "/fonts/local/source-sans-3.css"
+    },
+    {
+      "family": "Work Sans",
+      "slug": "work-sans",
+      "cssPath": "/fonts/local/work-sans.css"
+    },
+    {
+      "family": "Rubik",
+      "slug": "rubik",
+      "cssPath": "/fonts/local/rubik.css"
+    },
+    {
+      "family": "Archivo",
+      "slug": "archivo",
+      "cssPath": "/fonts/local/archivo.css"
+    },
+    {
+      "family": "Inter",
+      "slug": "inter",
+      "cssPath": "/fonts/local/inter.css"
+    }
+  ]
+}

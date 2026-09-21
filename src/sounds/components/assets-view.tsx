@@ -116,6 +116,11 @@ interface SfxManifestEntry {
 	duration: number;
 }
 
+// Negative, monotonically-decreasing ids for imported sounds — keeps them out
+// of the bundled pack's id space (1..N) and collision-proof even when several
+// files are picked within the same millisecond (unlike Date.now()-based ids).
+let importIdCounter = -1;
+
 function SoundEffectsView() {
 	const { playingId, playSound } = useSoundPlayback();
 	const [pack, setPack] = useState<SoundEffect[]>([]);
@@ -170,12 +175,25 @@ function SoundEffectsView() {
 	const handleFilesSelected = (files: FileList | null) => {
 		if (!files || files.length === 0) return;
 
-		const newItems: SoundEffect[] = Array.from(files).map((file, idx) => {
+		const newItems: SoundEffect[] = Array.from(files).map((file) => {
 			const objectUrl = URL.createObjectURL(file);
 			importedUrlsRef.current.push(objectUrl);
+			const id = importIdCounter--;
+
+			// Probe the real duration so addSoundToTimeline (which sizes the
+			// timeline element from sound.duration, not the decoded buffer)
+			// doesn't create a zero-length clip. Backfill once metadata loads.
+			const probe = new Audio(objectUrl);
+			probe.addEventListener("loadedmetadata", () => {
+				setImported((prev) =>
+					prev.map((it) =>
+						it.id === id ? { ...it, duration: probe.duration || 0 } : it,
+					),
+				);
+			});
+
 			return {
-				// Negative ids keep imports out of the bundled pack's id space.
-				id: -(Date.now() + idx),
+				id,
 				name: file.name,
 				url: "",
 				previewUrl: objectUrl,
@@ -228,6 +246,7 @@ function SoundEffectsView() {
 										sound={sound}
 										isPlaying={playingId === sound.id}
 										onPlay={playSound}
+										allowSave={false}
 									/>
 								))}
 								<Separator />
@@ -400,13 +419,43 @@ function SavedSoundsView() {
 	);
 }
 
+/**
+ * Resolves a sound's real duration from its audio URL. Used as a safety net
+ * when a SoundEffect reaches "add to timeline" before its duration has been
+ * backfilled (e.g. an import clicked before `loadedmetadata` fires) — without
+ * this, addSoundToTimeline would size the clip from a stale duration of 0.
+ */
+function probeAudioDuration(url: string): Promise<number> {
+	return new Promise((resolve) => {
+		const audio = new Audio(url);
+		const cleanup = () => {
+			audio.removeEventListener("loadedmetadata", onLoaded);
+			audio.removeEventListener("error", onError);
+		};
+		const onLoaded = () => {
+			cleanup();
+			resolve(audio.duration || 0);
+		};
+		const onError = () => {
+			cleanup();
+			resolve(0);
+		};
+		audio.addEventListener("loadedmetadata", onLoaded);
+		audio.addEventListener("error", onError);
+	});
+}
+
 interface AudioItemProps {
 	sound: SoundEffect;
 	isPlaying: boolean;
 	onPlay: ({ sound }: { sound: SoundEffect }) => void;
+	/** Session-only sounds (blob: URLs) can't be saved — their URL won't
+	 * survive a reload, leaving a broken entry in the persistent Saved store.
+	 * Defaults to true (bundled pack + already-saved sounds are safe to save). */
+	allowSave?: boolean;
 }
 
-function AudioItem({ sound, isPlaying, onPlay }: AudioItemProps) {
+function AudioItem({ sound, isPlaying, onPlay, allowSave = true }: AudioItemProps) {
 	const { addSoundToTimeline, isSoundSaved, toggleSavedSound } =
 		useSoundsStore();
 	const isSaved = isSoundSaved({ soundId: sound.id });
@@ -426,6 +475,14 @@ function AudioItem({ sound, isPlaying, onPlay }: AudioItemProps) {
 		stopPropagation,
 	}: React.MouseEvent<HTMLButtonElement>) => {
 		stopPropagation();
+		// Safety net: duration may not have been backfilled yet (see
+		// SoundEffectsView's loadedmetadata probe) — resolve it on demand so
+		// addSoundToTimeline never sizes the clip from a stale 0.
+		if (!sound.duration && sound.previewUrl) {
+			const duration = await probeAudioDuration(sound.previewUrl);
+			await addSoundToTimeline({ sound: { ...sound, duration } });
+			return;
+		}
 		await addSoundToTimeline({ sound });
 	};
 
@@ -463,22 +520,24 @@ function AudioItem({ sound, isPlaying, onPlay }: AudioItemProps) {
 				>
 					<HugeiconsIcon icon={PlusSignIcon} />
 				</Button>
-				<Button
-					variant="text"
-					size="icon"
-					className={`hover:text-foreground w-auto !opacity-100 ${
-						isSaved
-							? "text-red-500 hover:text-red-600"
-							: "text-muted-foreground"
-					}`}
-					onClick={handleSaveClick}
-					title={isSaved ? "Remove from saved" : "Save sound"}
-				>
-					<HugeiconsIcon
-						icon={FavouriteIcon}
-						className={`${isSaved ? "fill-current" : ""}`}
-					/>
-				</Button>
+				{allowSave && (
+					<Button
+						variant="text"
+						size="icon"
+						className={`hover:text-foreground w-auto !opacity-100 ${
+							isSaved
+								? "text-red-500 hover:text-red-600"
+								: "text-muted-foreground"
+						}`}
+						onClick={handleSaveClick}
+						title={isSaved ? "Remove from saved" : "Save sound"}
+					>
+						<HugeiconsIcon
+							icon={FavouriteIcon}
+							className={`${isSaved ? "fill-current" : ""}`}
+						/>
+					</Button>
+				)}
 			</div>
 		</div>
 	);

@@ -4,7 +4,14 @@
 // Fails loudly (non-zero exit) on the first error via execSync's default throw.
 
 import { execSync } from "node:child_process";
-import { existsSync, rmSync, cpSync, copyFileSync } from "node:fs";
+import {
+  existsSync,
+  rmSync,
+  cpSync,
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+} from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
@@ -17,6 +24,31 @@ const bun = process.env.BUN ?? "bun";
 function run(cmd) {
   console.log(`\n> ${cmd}`);
   execSync(cmd, { cwd: root, stdio: "inherit" });
+}
+
+// 0. Stage the offline auto-captions assets into public/ BEFORE next build, so
+// they get copied into .next/standalone/public and served locally by the sidecar
+// (no runtime network). The Whisper model is large + gitignored, so fetch it if
+// absent; the ort wasm comes from node_modules (version-correct) each build.
+const whisperDir = join(
+  root,
+  "public",
+  "models",
+  "onnx-community",
+  "whisper-base",
+);
+if (!existsSync(whisperDir)) {
+  run(`"${process.execPath}" scripts/fetch-whisper.mjs`);
+}
+
+const ortSrc = join(root, "node_modules", "onnxruntime-web", "dist");
+const ortDest = join(root, "public", "ort");
+mkdirSync(ortDest, { recursive: true });
+for (const f of readdirSync(ortSrc)) {
+  // The wasm runtime + its JS glue that transformers.js loads from wasmPaths.
+  if (/^ort-wasm.*\.(wasm|mjs)$/.test(f)) {
+    copyFileSync(join(ortSrc, f), join(ortDest, f));
+  }
 }
 
 // 1. Build Next.js (produces .next/standalone + .next/static)

@@ -5,6 +5,12 @@ import type {
 
 export const TRANSCRIPTION_MODELS: TranscriptionModel[] = [
 	{
+		id: "whisper-base",
+		name: "Base",
+		huggingFaceId: "onnx-community/whisper-base",
+		description: "Balanced accuracy (bundled offline)",
+	},
+	{
 		id: "whisper-tiny",
 		name: "Tiny",
 		huggingFaceId: "onnx-community/whisper-tiny",
@@ -31,4 +37,4 @@ export const TRANSCRIPTION_MODELS: TranscriptionModel[] = [
 ];
 
 export const DEFAULT_TRANSCRIPTION_MODEL: TranscriptionModelId =
-	"whisper-small";
+	"whisper-base";

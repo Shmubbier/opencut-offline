@@ -1,0 +1,77 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.18"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: public/models/onnx-community/whisper-base
+          key: whisper-base-q4-v1-${{ hashFiles('scripts/fetch-whisper.mjs') }}
+
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "tag=$tag tauri.conf version=$ver"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::Tag v$tag does not match tauri.conf.json version $ver"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build desktop installer
+        run: bun run desktop:build
+
+      - name: Smoke test bundle
+        run: node scripts/ci-smoke.mjs
+
+      - name: Upload installer artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCut-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/nsis/*.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true

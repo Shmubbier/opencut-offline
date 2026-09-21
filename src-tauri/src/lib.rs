@@ -77,6 +77,64 @@ mod tests {
     }
 }
 
+/// Assign `pid` to a new Win32 Job Object configured with
+/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, and leak the job handle so it stays
+/// open for the app's whole lifetime. When our process dies — even via a
+/// forced kill that skips the graceful `RunEvent` cleanup below — the OS
+/// closes the handle, which kills every process still in the job (the node
+/// sidecar), so it's never orphaned.
+#[cfg(windows)]
+fn guard_child_with_job(pid: u32) {
+    use std::mem::size_of;
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+
+    unsafe {
+        let job = match CreateJobObjectW(None, None) {
+            Ok(h) => h,
+            Err(e) => {
+                log::warn!("CreateJobObject failed: {e}; force-kill orphan guard disabled");
+                return;
+            }
+        };
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if let Err(e) = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const core::ffi::c_void,
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) {
+            log::warn!("SetInformationJobObject failed: {e}; force-kill orphan guard disabled");
+            return;
+        }
+        let process = match OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid) {
+            Ok(h) => h,
+            Err(e) => {
+                log::warn!("OpenProcess({pid}) failed: {e}; force-kill orphan guard disabled");
+                return;
+            }
+        };
+        if let Err(e) = AssignProcessToJobObject(job, process) {
+            log::warn!("AssignProcessToJobObject failed: {e}; force-kill orphan guard disabled");
+            return;
+        }
+        // IMPORTANT: do NOT call CloseHandle on `job` — leave it open for the app's
+        // whole lifetime. `windows::Win32::Foundation::HANDLE` is a plain `Copy`
+        // wrapper with no `Drop` impl (letting `job` go out of scope here does
+        // nothing), so simply never closing it is what keeps it alive: the OS
+        // closes it when our process exits, which triggers KILL_ON_JOB_CLOSE and
+        // terminates the sidecar even on a forced kill.
+        log::info!("sidecar pid {pid} assigned to kill-on-close job");
+    }
+}
+// ponytail: Windows-only orphan guard via Job Object. Non-Windows targets don't
+// build this app today; add a POSIX equivalent (prctl/process group) if ported.
+
 fn pick_free_port() -> std::io::Result<u16> {
     // ponytail: bind-then-drop has a tiny race (another process could grab the
     // port between drop and our spawn) — acceptable for a single-user desktop
@@ -176,6 +234,8 @@ pub fn run() {
                     return Ok(());
                 }
             };
+            #[cfg(windows)]
+            guard_child_with_job(child.pid());
             app_handle.state::<ServerChild>().0.lock().unwrap().replace(child);
 
             // Drain the sidecar's stdout/stderr so it doesn't block, and log it.

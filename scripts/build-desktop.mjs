@@ -30,16 +30,9 @@ function run(cmd) {
 // they get copied into .next/standalone/public and served locally by the sidecar
 // (no runtime network). The Whisper model is large + gitignored, so fetch it if
 // absent; the ort wasm comes from node_modules (version-correct) each build.
-const whisperDir = join(
-  root,
-  "public",
-  "models",
-  "onnx-community",
-  "whisper-base",
-);
-if (!existsSync(whisperDir)) {
-  run(`"${process.execPath}" scripts/fetch-whisper.mjs`);
-}
+// Always run — fetch-whisper is idempotent and completeness-checked, so it
+// fills a missing/partial (e.g. CI-cached) model and no-ops when complete.
+run(`"${process.execPath}" scripts/fetch-whisper.mjs`);
 
 const ortSrc = join(root, "node_modules", "onnxruntime-web", "dist");
 const ortDest = join(root, "public", "ort");

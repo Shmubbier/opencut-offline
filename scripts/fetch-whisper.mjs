@@ -30,22 +30,55 @@ const FILES = [
   "onnx/decoder_model_merged_q4.onnx",
 ];
 
-async function download(rel) {
+// Authoritative per-file sizes from the HF tree API (the resolve endpoint's
+// proxy doesn't expose content-length / x-linked-size, so header probing can't
+// detect a truncated file). Returns a Map<path, size>; empty on failure, in
+// which case we fall back to "present and non-empty" completeness.
+async function fetchExpectedSizes() {
+  const map = new Map();
+  try {
+    const r = await fetch(
+      `https://huggingface.co/api/models/${HF_ID}/tree/main?recursive=true`,
+    );
+    if (!r.ok) return map;
+    for (const e of await r.json()) {
+      if (e.type === "file" && typeof e.size === "number") map.set(e.path, e.size);
+    }
+  } catch {
+    /* offline / API down: map stays empty, fall back below */
+  }
+  return map;
+}
+
+async function download(rel, expected) {
   const dest = join(OUT, rel);
-  if (existsSync(dest) && statSync(dest).size > 0) {
-    console.log(`  skip ${rel} (exists)`);
-    return;
+  const url = `${BASE}/${rel}`;
+  if (existsSync(dest)) {
+    const local = statSync(dest).size;
+    // Complete when local matches the known size, or the size is unknown
+    // (API unavailable) but the file is non-empty.
+    if (local > 0 && (expected === undefined || local === expected)) {
+      console.log(`  skip ${rel} (complete, ${local} bytes)`);
+      return;
+    }
+    console.log(`  refetch ${rel} (local ${local} != expected ${expected})`);
   }
   mkdirSync(dirname(dest), { recursive: true });
-  const url = `${BASE}/${rel}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`GET ${url} -> ${res.status} ${res.statusText}`);
   await pipeline(res.body, createWriteStream(dest));
-  console.log(`  ok   ${rel} (${(statSync(dest).size / 1e6).toFixed(1)} MB)`);
+  const got = statSync(dest).size;
+  if (expected !== undefined && got !== expected) {
+    throw new Error(
+      `size mismatch after download ${rel}: got ${got}, expected ${expected}`,
+    );
+  }
+  console.log(`  ok   ${rel} (${(got / 1e6).toFixed(1)} MB)`);
 }
 
 console.log(`Fetching ${HF_ID} (q4) -> ${OUT}`);
+const expectedSizes = await fetchExpectedSizes();
 for (const f of FILES) {
-  await download(f);
+  await download(f, expectedSizes.get(f));
 }
 console.log("Whisper base model ready.");

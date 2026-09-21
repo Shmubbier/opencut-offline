@@ -11,7 +11,7 @@ dependency has been removed so nothing phones home.
 
 ## Download / Install
 
-**[⬇ Download OpenCut_0.1.1_x64-setup.exe](https://github.com/Shmubbier/opencut-offline/releases/download/v0.1.1/OpenCut_0.1.1_x64-setup.exe)** (~115 MB) — latest release: **[v0.1.1](https://github.com/Shmubbier/opencut-offline/releases/latest)**. See all [Releases](../../releases), or build it yourself (below).
+**[⬇ Download the latest installer](https://github.com/Shmubbier/opencut-offline/releases/latest)** (~115 MB) — from the **[latest release](https://github.com/Shmubbier/opencut-offline/releases/latest)** (currently v0.1.2). See all [Releases](../../releases), or build it yourself (below). Releases are built + published automatically by CI on each version tag.
 
 - Per-user install, **no admin required**. Windows may show a SmartScreen prompt for the unsigned installer — choose *More info → Run anyway*.
 

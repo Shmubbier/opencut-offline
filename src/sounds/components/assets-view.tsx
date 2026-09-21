@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -17,12 +17,69 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSoundsStore } from "@/sounds/sounds-store";
 import type { SavedSound, SoundEffect } from "@/sounds/types";
 import {
+	CloudUploadIcon,
 	FavouriteIcon,
 	PauseIcon,
 	PlayIcon,
 	PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+
+/** Shared zero/default shape for fields Freesound would normally supply. */
+function blankSoundEffectFields() {
+	return {
+		description: "",
+		filesize: 0,
+		type: "audio",
+		channels: 0,
+		bitrate: 0,
+		bitdepth: 0,
+		samplerate: 0,
+		tags: [] as string[],
+		license: "CC0",
+		created: new Date().toISOString(),
+		downloads: 0,
+		rating: 0,
+		ratingCount: 0,
+	};
+}
+
+/** Small hook: single-audio-element play/pause state, shared by both tabs. */
+function useSoundPlayback() {
+	const [playingId, setPlayingId] = useState<number | null>(null);
+	const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(
+		null,
+	);
+
+	const playSound = ({ sound }: { sound: SoundEffect }) => {
+		if (playingId === sound.id) {
+			audioElement?.pause();
+			setPlayingId(null);
+			return;
+		}
+
+		audioElement?.pause();
+
+		if (sound.previewUrl) {
+			const audio = new Audio(sound.previewUrl);
+			audio.addEventListener("ended", () => {
+				setPlayingId(null);
+			});
+			audio.addEventListener("error", () => {
+				setPlayingId(null);
+			});
+			audio.play().catch((error) => {
+				console.error("Failed to play sound preview:", error);
+				setPlayingId(null);
+			});
+
+			setAudioElement(audio);
+			setPlayingId(sound.id);
+		}
+	};
+
+	return { playingId, playSound };
+}
 
 export function SoundsView() {
 	return (
@@ -52,16 +109,148 @@ export function SoundsView() {
 	);
 }
 
-// ponytail: sound effects were an online-only Freesound search with no local
-// fallback data — offline build shows a static notice instead of the
-// search UI. Add a bundled sound library here if offline browsing is needed.
+interface SfxManifestEntry {
+	id: number;
+	name: string;
+	file: string;
+	duration: number;
+}
+
 function SoundEffectsView() {
+	const { playingId, playSound } = useSoundPlayback();
+	const [pack, setPack] = useState<SoundEffect[]>([]);
+	const [packError, setPackError] = useState<string | null>(null);
+	// ponytail: imported sounds are session-scoped (object URLs die on reload/
+	// restart) — persisting them (e.g. IndexedDB) is a follow-up if users need
+	// imports to survive across sessions.
+	const [imported, setImported] = useState<SoundEffect[]>([]);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	// Object URLs are only valid for this session — revoked below on unmount.
+	const importedUrlsRef = useRef<string[]>([]);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		fetch("/sfx/manifest.json")
+			.then((res) => {
+				if (!res.ok) throw new Error(`Failed to load sound pack (${res.status})`);
+				return res.json();
+			})
+			.then((manifest: { sounds: SfxManifestEntry[] }) => {
+				if (cancelled) return;
+				setPack(
+					manifest.sounds.map((entry) => ({
+						id: entry.id,
+						name: entry.name,
+						url: "",
+						previewUrl: `/sfx/${entry.file}`,
+						downloadUrl: `/sfx/${entry.file}`,
+						duration: entry.duration,
+						username: "Built-in",
+						...blankSoundEffectFields(),
+					})),
+				);
+			})
+			.catch((error) => {
+				if (!cancelled) setPackError(String(error));
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	// Best-effort cleanup: revoke every object URL we've handed out.
+	useEffect(() => {
+		return () => {
+			for (const url of importedUrlsRef.current) URL.revokeObjectURL(url);
+		};
+	}, []);
+
+	const handleFilesSelected = (files: FileList | null) => {
+		if (!files || files.length === 0) return;
+
+		const newItems: SoundEffect[] = Array.from(files).map((file, idx) => {
+			const objectUrl = URL.createObjectURL(file);
+			importedUrlsRef.current.push(objectUrl);
+			return {
+				// Negative ids keep imports out of the bundled pack's id space.
+				id: -(Date.now() + idx),
+				name: file.name,
+				url: "",
+				previewUrl: objectUrl,
+				downloadUrl: objectUrl,
+				duration: 0,
+				username: "Imported",
+				...blankSoundEffectFields(),
+			};
+		});
+
+		setImported((prev) => [...newItems, ...prev]);
+	};
+
 	return (
-		<div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-			<p className="text-sm font-medium">Sound search is unavailable offline</p>
-			<p className="text-muted-foreground text-sm text-balance">
-				Browse the Saved tab for sounds you've already added
-			</p>
+		<div className="mt-1 flex h-full flex-col gap-4">
+			<div>
+				<input
+					ref={fileInputRef}
+					type="file"
+					accept="audio/*"
+					multiple
+					className="hidden"
+					onChange={(e) => {
+						handleFilesSelected(e.target.files);
+						e.target.value = "";
+					}}
+				/>
+				<Button
+					variant="outline"
+					size="sm"
+					className="w-full"
+					onClick={() => fileInputRef.current?.click()}
+				>
+					<HugeiconsIcon icon={CloudUploadIcon} className="size-4" />
+					Import audio files
+				</Button>
+			</div>
+
+			<div className="relative h-full overflow-hidden">
+				<ScrollArea className="h-full flex-1">
+					<div className="flex flex-col gap-4">
+						{imported.length > 0 && (
+							<>
+								<p className="text-muted-foreground text-xs font-medium">
+									Imported ({imported.length})
+								</p>
+								{imported.map((sound) => (
+									<AudioItem
+										key={sound.id}
+										sound={sound}
+										isPlaying={playingId === sound.id}
+										onPlay={playSound}
+									/>
+								))}
+								<Separator />
+							</>
+						)}
+
+						<p className="text-muted-foreground text-xs font-medium">
+							Sound effects
+						</p>
+						{packError && (
+							<p className="text-destructive text-sm">{packError}</p>
+						)}
+						{pack.map((sound) => (
+							<AudioItem
+								key={sound.id}
+								sound={sound}
+								isPlaying={playingId === sound.id}
+								onPlay={playSound}
+							/>
+						))}
+					</div>
+				</ScrollArea>
+			</div>
 		</div>
 	);
 }
@@ -75,43 +264,13 @@ function SavedSoundsView() {
 		clearSavedSounds,
 	} = useSoundsStore();
 
-	const [playingId, setPlayingId] = useState<number | null>(null);
-	const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(
-		null,
-	);
+	const { playingId, playSound } = useSoundPlayback();
 
 	const [showClearDialog, setShowClearDialog] = useState(false);
 
 	useEffect(() => {
 		loadSavedSounds();
 	}, [loadSavedSounds]);
-
-	const playSound = ({ sound }: { sound: SoundEffect }) => {
-		if (playingId === sound.id) {
-			audioElement?.pause();
-			setPlayingId(null);
-			return;
-		}
-
-		audioElement?.pause();
-
-		if (sound.previewUrl) {
-			const audio = new Audio(sound.previewUrl);
-			audio.addEventListener("ended", () => {
-				setPlayingId(null);
-			});
-			audio.addEventListener("error", () => {
-				setPlayingId(null);
-			});
-			audio.play().catch((error) => {
-				console.error("Failed to play sound preview:", error);
-				setPlayingId(null);
-			});
-
-			setAudioElement(audio);
-			setPlayingId(sound.id);
-		}
-	};
 
 	const convertToSoundEffect = ({
 		savedSound,

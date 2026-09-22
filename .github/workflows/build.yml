@@ -33,11 +33,11 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Cache Whisper model
+      - name: Cache Whisper models
         uses: actions/cache@v4
         with:
-          path: public/models/onnx-community/whisper-base
-          key: whisper-base-q4-v1-${{ hashFiles('scripts/fetch-whisper.mjs') }}
+          path: public/models
+          key: whisper-models-v2-${{ hashFiles('scripts/fetch-whisper.mjs') }}
 
       - name: Verify tag matches app version
         if: startsWith(github.ref, 'refs/tags/v')

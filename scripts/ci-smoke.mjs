@@ -26,6 +26,9 @@ const PATHS = [
   "/models/onnx-community/whisper-base/config.json",
   "/models/onnx-community/whisper-base/tokenizer.json",
   "/models/onnx-community/whisper-base/onnx/encoder_model_q4.onnx",
+  "/models/onnx-community/whisper-small/config.json",
+  "/models/onnx-community/whisper-small/tokenizer.json",
+  "/models/onnx-community/whisper-small/onnx/encoder_model_q4.onnx",
 ];
 
 const child = spawn(process.execPath, [serverJs], {

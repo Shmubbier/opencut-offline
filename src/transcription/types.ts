@@ -27,12 +27,8 @@ export interface TranscriptionProgress {
 	message?: string;
 }
 
-export type TranscriptionModelId =
-	| "whisper-base"
-	| "whisper-tiny"
-	| "whisper-small"
-	| "whisper-medium"
-	| "whisper-large-v3-turbo";
+// Bundled offline models only (see src/transcription/models.ts).
+export type TranscriptionModelId = "whisper-base" | "whisper-small";
 
 export interface TranscriptionModel {
 	id: TranscriptionModelId;

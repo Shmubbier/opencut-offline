@@ -3,36 +3,20 @@ import type {
 	TranscriptionModelId,
 } from "./types";
 
+// Only models bundled offline (public/models/onnx-community/<id>/) may be
+// listed — the picker can't offer a model that isn't in the installer.
 export const TRANSCRIPTION_MODELS: TranscriptionModel[] = [
 	{
 		id: "whisper-base",
 		name: "Base",
 		huggingFaceId: "onnx-community/whisper-base",
-		description: "Balanced accuracy (bundled offline)",
-	},
-	{
-		id: "whisper-tiny",
-		name: "Tiny",
-		huggingFaceId: "onnx-community/whisper-tiny",
-		description: "Fastest, lower accuracy",
+		description: "Balanced speed and accuracy (default)",
 	},
 	{
 		id: "whisper-small",
 		name: "Small",
 		huggingFaceId: "onnx-community/whisper-small",
-		description: "Good balance of speed and accuracy",
-	},
-	{
-		id: "whisper-medium",
-		name: "Medium",
-		huggingFaceId: "onnx-community/whisper-medium",
-		description: "Higher accuracy, slower",
-	},
-	{
-		id: "whisper-large-v3-turbo",
-		name: "Large v3 Turbo",
-		huggingFaceId: "onnx-community/whisper-large-v3-turbo",
-		description: "Best accuracy, requires WebGPU for good performance",
+		description: "Most accurate, larger and slower",
 	},
 ];
 

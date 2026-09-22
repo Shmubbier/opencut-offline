@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-// Downloads the Whisper base model (q4 ONNX) from the HF hub into public/models/
-// so it can be bundled and served offline by the sidecar. Build-time only — the
-// runtime app never touches the network. Idempotent: skips files already present.
+// Downloads the bundled Whisper models (q4 ONNX) from the HF hub into
+// public/models/ so they can be bundled and served offline by the sidecar.
+// Build-time only — the runtime app never touches the network. Idempotent +
+// completeness-checked (per-file size from the HF tree API).
 //
 // dtype q4 matches worker.ts (`dtype: "q4"`): encoder_model_q4.onnx +
-// decoder_model_merged_q4.onnx (~142MB total), balanced accuracy for "base".
+// decoder_model_merged_q4.onnx per model. base ~142MB, small ~299MB.
 
 import { mkdirSync, existsSync, createWriteStream, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-const HF_ID = "onnx-community/whisper-base";
-const BASE = `https://huggingface.co/${HF_ID}/resolve/main`;
-const OUT = join(import.meta.dirname, "..", "public", "models", HF_ID);
+const HF_ORG = "onnx-community";
+const MODELS = ["whisper-base", "whisper-small"];
+const MODELS_ROOT = join(import.meta.dirname, "..", "public", "models", HF_ORG);
 
 // Config/tokenizer files transformers.js needs, plus the q4 ONNX pair.
 const FILES = [
@@ -34,11 +35,11 @@ const FILES = [
 // proxy doesn't expose content-length / x-linked-size, so header probing can't
 // detect a truncated file). Returns a Map<path, size>; empty on failure, in
 // which case we fall back to "present and non-empty" completeness.
-async function fetchExpectedSizes() {
+async function fetchExpectedSizes(hfId) {
   const map = new Map();
   try {
     const r = await fetch(
-      `https://huggingface.co/api/models/${HF_ID}/tree/main?recursive=true`,
+      `https://huggingface.co/api/models/${hfId}/tree/main?recursive=true`,
     );
     if (!r.ok) return map;
     for (const e of await r.json()) {
@@ -50,9 +51,9 @@ async function fetchExpectedSizes() {
   return map;
 }
 
-async function download(rel, expected) {
-  const dest = join(OUT, rel);
-  const url = `${BASE}/${rel}`;
+async function download(rel, baseUrl, outDir, expected) {
+  const dest = join(outDir, rel);
+  const url = `${baseUrl}/${rel}`;
   if (existsSync(dest)) {
     const local = statSync(dest).size;
     // Complete when local matches the known size, or the size is unknown
@@ -76,9 +77,14 @@ async function download(rel, expected) {
   console.log(`  ok   ${rel} (${(got / 1e6).toFixed(1)} MB)`);
 }
 
-console.log(`Fetching ${HF_ID} (q4) -> ${OUT}`);
-const expectedSizes = await fetchExpectedSizes();
-for (const f of FILES) {
-  await download(f, expectedSizes.get(f));
+for (const model of MODELS) {
+  const hfId = `${HF_ORG}/${model}`;
+  const baseUrl = `https://huggingface.co/${hfId}/resolve/main`;
+  const outDir = join(MODELS_ROOT, model);
+  console.log(`Fetching ${hfId} (q4) -> ${outDir}`);
+  const sizes = await fetchExpectedSizes(hfId);
+  for (const f of FILES) {
+    await download(f, baseUrl, outDir, sizes.get(f));
+  }
 }
-console.log("Whisper base model ready.");
+console.log("Whisper models ready.");

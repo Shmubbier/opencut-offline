@@ -25,6 +25,7 @@ export interface TranscriptionProgress {
 	status: TranscriptionStatus;
 	progress: number;
 	message?: string;
+	backend?: string;
 }
 
 // Bundled offline models only (see src/transcription/models.ts).

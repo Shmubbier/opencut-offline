@@ -138,6 +138,12 @@ class TranscriptionService {
 						this.isInitialized = true;
 						this.isInitializing = false;
 						this.currentModelId = modelId;
+						onProgress?.({
+							status: "loading-model",
+							progress: 100,
+							message: `${model.name} ready`,
+							backend: response.backend,
+						});
 						resolve();
 						break;
 

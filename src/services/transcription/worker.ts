@@ -44,7 +44,7 @@ export type WorkerMessage =
 
 export type WorkerResponse =
 	| { type: "init-progress"; progress: number }
-	| { type: "init-complete" }
+	| { type: "init-complete"; backend: string }
 	| { type: "init-error"; error: string }
 	| { type: "transcribe-progress"; progress: number }
 	| {
@@ -135,7 +135,24 @@ async function handleInit({ modelId }: { modelId: string }) {
 			},
 		})) as unknown as AutomaticSpeechRecognitionPipeline;
 
-		self.postMessage({ type: "init-complete" } satisfies WorkerResponse);
+		let backend = "CPU";
+		try {
+			// WebGPU types aren't in the default TS lib; probe with a minimal cast.
+			const gpu =
+				typeof navigator !== "undefined"
+					? (navigator as unknown as {
+							gpu?: { requestAdapter(): Promise<unknown> };
+						}).gpu
+					: undefined;
+			const adapter = gpu ? await gpu.requestAdapter() : null;
+			if (adapter) backend = "GPU (WebGPU)";
+		} catch {
+			/* no WebGPU available: stay on CPU */
+		}
+		self.postMessage({
+			type: "init-complete",
+			backend,
+		} satisfies WorkerResponse);
 	} catch (error) {
 		self.postMessage({
 			type: "init-error",

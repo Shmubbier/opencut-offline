@@ -7,7 +7,13 @@
 // dtype q4 matches worker.ts (`dtype: "q4"`): encoder_model_q4.onnx +
 // decoder_model_merged_q4.onnx per model. base ~142MB, small ~299MB.
 
-import { mkdirSync, existsSync, createWriteStream, statSync } from "node:fs";
+import {
+  mkdirSync,
+  existsSync,
+  createWriteStream,
+  statSync,
+  rmSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
@@ -51,6 +57,8 @@ async function fetchExpectedSizes(hfId) {
   return map;
 }
 
+const MAX_ATTEMPTS = 8;
+
 async function download(rel, baseUrl, outDir, expected) {
   const dest = join(outDir, rel);
   const url = `${baseUrl}/${rel}`;
@@ -62,12 +70,38 @@ async function download(rel, baseUrl, outDir, expected) {
       console.log(`  skip ${rel} (complete, ${local} bytes)`);
       return;
     }
-    console.log(`  refetch ${rel} (local ${local} != expected ${expected})`);
+    console.log(`  resume/refetch ${rel} (local ${local} != expected ${expected})`);
   }
   mkdirSync(dirname(dest), { recursive: true });
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`GET ${url} -> ${res.status} ${res.statusText}`);
-  await pipeline(res.body, createWriteStream(dest));
+
+  // Resumable download with retry: HF's CDN supports Range, so a dropped
+  // connection on a large file resumes from where it left off instead of
+  // restarting. Needed because big models (~233MB) can't always complete in one
+  // stream over a flaky link.
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let have = existsSync(dest) ? statSync(dest).size : 0;
+    if (expected !== undefined && have > expected) {
+      rmSync(dest, { force: true }); // corrupt/oversized — start clean
+      have = 0;
+    }
+    if (expected !== undefined && have === expected) break; // already complete
+    try {
+      const res = await fetch(url, have > 0 ? { headers: { Range: `bytes=${have}-` } } : {});
+      if (have > 0 && res.status === 206) {
+        await pipeline(res.body, createWriteStream(dest, { flags: "a" }));
+      } else if (res.ok) {
+        // Server ignored Range (or fresh start): overwrite from the beginning.
+        await pipeline(res.body, createWriteStream(dest));
+      } else {
+        throw new Error(`GET ${url} -> ${res.status} ${res.statusText}`);
+      }
+    } catch (e) {
+      console.log(`  attempt ${attempt}/${MAX_ATTEMPTS} for ${rel} failed: ${e.message}`);
+      if (attempt === MAX_ATTEMPTS) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * attempt)); // linear backoff
+    }
+  }
+
   const got = statSync(dest).size;
   if (expected !== undefined && got !== expected) {
     throw new Error(

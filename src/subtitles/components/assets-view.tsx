@@ -13,9 +13,14 @@ import { useEditor } from "@/editor/use-editor";
 import { TRANSCRIPTION_DIAGNOSTICS_SCOPE } from "@/transcription/diagnostics";
 import { DEFAULT_TRANSCRIPTION_SAMPLE_RATE } from "@/transcription/audio";
 import { TRANSCRIPTION_LANGUAGES } from "@/transcription/supported-languages";
+import {
+	TRANSCRIPTION_MODELS,
+	DEFAULT_TRANSCRIPTION_MODEL,
+} from "@/transcription/models";
 import type {
 	CaptionChunk,
 	TranscriptionLanguage,
+	TranscriptionModelId,
 	TranscriptionProgress,
 } from "@/transcription/types";
 import { transcriptionService } from "@/services/transcription/service";
@@ -86,6 +91,29 @@ function processingReducer(
 export function Captions() {
 	const [selectedLanguage, setSelectedLanguage] =
 		useState<TranscriptionLanguage>("auto");
+	const [selectedModel, setSelectedModel] = useState<TranscriptionModelId>(
+		() => {
+			try {
+				const saved = localStorage.getItem("opencut.captionModel");
+				if (saved && TRANSCRIPTION_MODELS.some((m) => m.id === saved)) {
+					return saved as TranscriptionModelId;
+				}
+			} catch {
+				/* ignore */
+			}
+			return DEFAULT_TRANSCRIPTION_MODEL;
+		},
+	);
+	const [backend, setBackend] = useState<string | null>(null);
+
+	const handleModelChange = (value: string) => {
+		setSelectedModel(value as TranscriptionModelId);
+		try {
+			localStorage.setItem("opencut.captionModel", value);
+		} catch {
+			/* ignore */
+		}
+	};
 	const [processing, dispatch] = useReducer(processingReducer, IDLE_STATE);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +126,7 @@ export function Captions() {
 	);
 
 	const handleProgress = (progress: TranscriptionProgress) => {
+		if (progress.backend) setBackend(progress.backend);
 		if (progress.status === "loading-model") {
 			dispatch({
 				type: "update_step",
@@ -135,6 +164,7 @@ export function Captions() {
 			const result = await transcriptionService.transcribe({
 				audioData: samples,
 				language: selectedLanguage === "auto" ? undefined : selectedLanguage,
+				modelId: selectedModel,
 				onProgress: handleProgress,
 			});
 
@@ -289,6 +319,20 @@ export function Captions() {
 			>
 				<SectionContent className="flex flex-col gap-4 h-full pt-1">
 					<SectionFields>
+						<SectionField label="Model">
+							<Select value={selectedModel} onValueChange={handleModelChange}>
+								<SelectTrigger>
+									<SelectValue placeholder="Select a model" />
+								</SelectTrigger>
+								<SelectContent>
+									{TRANSCRIPTION_MODELS.map((model) => (
+										<SelectItem key={model.id} value={model.id}>
+											{model.name} — {model.description}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</SectionField>
 						<SectionField label="Language">
 							<Select
 								value={selectedLanguage}
@@ -307,6 +351,11 @@ export function Captions() {
 								</SelectContent>
 							</Select>
 						</SectionField>
+						{backend && (
+							<p className="text-muted-foreground text-xs">
+								Runs on: {backend}
+							</p>
+						)}
 					</SectionFields>
 
 					<Button
